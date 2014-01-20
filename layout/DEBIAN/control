@@ -1,0 +1,14 @@
+Package: com.autopear.ncdatecustomizer
+Version: 1.0
+Section: Tweak
+Maintainer: BigBoss <bigboss@thebigboss.org>
+Depends: firmware (>= 7.0), mobilesubstrate (>= 0.9.5000)
+Conflicts: com.autopear.nccleaner
+Replaces: com.autopear.nccleaner
+Architecture: iphoneos-arm
+Name: NC Date Customizer
+Description: Customize date label in Notification Center.
+Sponsor: thebigboss.org <http://thebigboss.org>
+Author: Merlin
+Tag: role:enduser
+dev: lonelystars
