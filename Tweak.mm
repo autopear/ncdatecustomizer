@@ -177,8 +177,6 @@ static void LoadPreferences(BOOL init) {
             [todayController updateTableHeader];
         if ([todayController respondsToSelector:@selector(forceUpdateTableHeader)])
             [todayController forceUpdateTableHeader];
-
-        dateLabel.textAlignment = NSTextAlignmentRight;
     }
 
     if (visibilityChanged && enabled) {
@@ -215,7 +213,6 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
     UILabel* _dateLabel = CHIvar(view, _dateLabel, UILabel *);
     dateLabel = _dateLabel;
     dateLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
-
 
     alertDelegate = [[[NCAlertDelegate alloc] init] retain];
 

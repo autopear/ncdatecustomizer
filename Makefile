@@ -12,6 +12,6 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 before-package::
 	find _ -name "*.plist" -exec plutil -convert binary1 {} \;
 	find _ -exec touch -r _/Library/MobileSubstrate/DynamicLibraries/NCDateCustomizer.dylib {} \;
-        
+
 after-package::
 	rm -fr .theos/packages/*
