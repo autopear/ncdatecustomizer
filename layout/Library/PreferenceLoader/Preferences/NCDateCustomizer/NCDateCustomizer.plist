@@ -41,6 +41,20 @@
 			<key>defaults</key>
 			<string>com.autopear.ncdatecustomizer</string>
 			<key>key</key>
+			<string>visible</string>
+			<key>label</key>
+			<string>Visible</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.autopear.ncdatecustomizer.changed</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.autopear.ncdatecustomizer</string>
+			<key>key</key>
 			<string>singleLine</string>
 			<key>label</key>
 			<string>Single Line</string>

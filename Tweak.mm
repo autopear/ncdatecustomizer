@@ -12,17 +12,29 @@
 + (id)defaultBackgroundColor;
 - (void)layoutSubviews;
 - (CGSize)sizeThatFits:(CGSize)size;
-- (CGRect)dateLabelFrame;
-- (void)updateContent;
-- (id)dateHeaderAttributedString;
-- (id)dateHeader;
+- (CGRect)dateLabelFrame; //iOS 7.0
+- (CGRect)dateLabelFrameForBounds:(CGRect)bounds force:(BOOL)force; //iOS 7.1
+- (void)updateContent; //iOS 7.0
+- (id)dateHeaderAttributedString; //iOS 7.0
+- (id)dateHeader; //iOS 7.0
+- (id)dateHeaderAttributedStringOnSingleLine:(BOOL)line; //iOS 7.1
+- (id)dateHeaderOnSingleLine:(BOOL)line; //iOS 7.1
 - (void)dealloc;
 - (SBTodayTableHeaderView *)initWithFrame:(CGRect)frame;
 @end
 
-@interface SBTodayViewController {
+@interface SBTodayViewController : UIViewController {
+	NSMutableArray* _visibleSectionIDs;
 }
-- (void)updateTableHeader;
+- (id)firstSection; //iOS 7.0
+- (void)widget:(id)widget didUpdatePreferredSize:(CGSize)size;
+- (void)updateTableHeader; //iOS 7.0
+- (void)forceUpdateTableHeader; //iOS 7.1
+- (void)updateTableHeaderIfNecessary; //iOS 7.1
+- (void)_updateTableHeader:(BOOL)header;
+- (id)todayTableHeaderView;
+- (id)infoForWidgetSection:(id)widgetSection;
+- (void)viewWillLayoutSubviews;
 @end
 
 @interface SBNotificationCenterViewController : UIViewController {
@@ -36,7 +48,24 @@
 + (SBNotificationCenterController *)sharedInstance;
 @end
 
+
+@interface SpringBoard : UIApplication
+-(void)relaunchSpringBoard;
+@end
+
+@interface NCAlertDelegate : NSObject <UIAlertViewDelegate>
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex;
+@end
+
+@implementation NCAlertDelegate
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+    if (buttonIndex != alertView.cancelButtonIndex)
+        [(SpringBoard *)[objc_getClass("SpringBoard") sharedApplication] relaunchSpringBoard];
+}
+@end
+
 static BOOL enabled = YES;
+static BOOL visible = YES;
 static BOOL singleLine = YES;
 static CGFloat leftMargin = 47.0f;
 static CGFloat red = 1.0f;
@@ -47,20 +76,36 @@ static CGFloat alpha = 1.0f;
 static SBTodayTableHeaderView *headerView = nil;
 static UILabel *dateLabel = nil;
 static SBTodayViewController *todayController = nil;
+static NCAlertDelegate *alertDelegate = nil;
+static NSString *alertTitle = nil, *alertMessage = nil, *alertCancel = nil, *alertRespring = nil;
 
-static void LoadPreferences() {
+static void LoadPreferences(BOOL init) {
 	NSDictionary *preferences = [NSDictionary dictionaryWithContentsOfFile:PreferencesFilePath];
 
     if ([preferences objectForKey:@"enabled"])
         enabled = [[preferences objectForKey:@"enabled"] boolValue];
     else
         enabled = YES;
-    
+
+    BOOL visibilityChanged = NO;
+    if (init) {
+        if ([preferences objectForKey:@"visible"])
+            visible = [[preferences objectForKey:@"visible"] boolValue];
+        else
+            visible = YES;
+    } else {
+        BOOL tmp = [preferences objectForKey:@"visible"] ? [[preferences objectForKey:@"visible"] boolValue] : YES;
+        if (tmp != visible) {
+            visible = tmp;
+            visibilityChanged = YES;
+        }
+    }
+
     if ([preferences objectForKey:@"singleLine"])
         singleLine = [[preferences objectForKey:@"singleLine"] boolValue];
     else
         singleLine = YES;
-    
+
     if ([preferences objectForKey:@"leftMargin"])
         leftMargin = [[preferences objectForKey:@"leftMargin"] floatValue];
     else
@@ -91,7 +136,8 @@ static void LoadPreferences() {
             dateLabel.adjustsFontSizeToFitWidth = NO;
             dateLabel.font = [%c(SBTodayTableHeaderView) defaultFont];
 
-            [headerView updateContent];
+            if ([headerView respondsToSelector:@selector(updateContent)])
+                [headerView updateContent];
 
             if (singleLine) {
                 dateLabel.numberOfLines = 1;
@@ -99,17 +145,19 @@ static void LoadPreferences() {
             } else {
                 dateLabel.numberOfLines = 2;
             }
-            
+
             CGRect frame = dateLabel.frame;
             frame.origin.x = leftMargin;
             frame.size.width = headerView.frame.size.width - leftMargin;
             dateLabel.frame = frame;
+
         } else {
             dateLabel.adjustsFontSizeToFitWidth = NO;
             dateLabel.font = [%c(SBTodayTableHeaderView) defaultFont];
             dateLabel.numberOfLines = 2;
 
-            [headerView updateContent];
+            if ([headerView respondsToSelector:@selector(updateContent)])
+                [headerView updateContent];
 
             CGRect frame = dateLabel.frame;
             frame.origin.x = 47.0f;
@@ -120,17 +168,28 @@ static void LoadPreferences() {
         dateLabel.textColor = [%c(SBTodayTableHeaderView) defaultTextColor];
 
         [headerView layoutSubviews];
-        
+
         if (!todayController) {
             SBNotificationCenterViewController *viewController = [%c(SBNotificationCenterController) sharedInstance].viewController;
             todayController = CHIvar(viewController, _todayViewController, SBTodayViewController *);
         }
-        [todayController updateTableHeader];
+        if ([todayController respondsToSelector:@selector(updateContent)])
+            [todayController updateTableHeader];
+        if ([todayController respondsToSelector:@selector(forceUpdateTableHeader)])
+            [todayController forceUpdateTableHeader];
+
+        dateLabel.textAlignment = NSTextAlignmentRight;
+    }
+
+    if (visibilityChanged && enabled) {
+        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:alertTitle message:alertMessage delegate:alertDelegate cancelButtonTitle:alertCancel otherButtonTitles:alertRespring, nil];
+        [alert show];
+        [alert release];
     }
 }
 
 static void PreferencesChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    LoadPreferences();
+    LoadPreferences(NO);
 }
 
 %hook SBTodayTableDateHeader
@@ -138,10 +197,10 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 - (SBTodayTableDateHeader *)initWithDateString:(NSString *)dateString ordinalRange:(NSRange)range shouldSuperscriptOrdinal:(BOOL)ordinal {
     if (enabled && singleLine) {
         NSString *newDateString = [dateString stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-        
+
         return %orig(newDateString, range, NO);
     }
-    
+
     return %orig(dateString, range, ordinal);
 }
 
@@ -152,20 +211,52 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 - (SBTodayTableHeaderView *)initWithFrame:(CGRect)frame {
     SBTodayTableHeaderView *view = %orig(frame);
     headerView = view;
-    
+
     UILabel* _dateLabel = CHIvar(view, _dateLabel, UILabel *);
     dateLabel = _dateLabel;
     dateLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
 
-    LoadPreferences();
-    
+
+    alertDelegate = [[[NCAlertDelegate alloc] init] retain];
+
+    NSBundle *localizedBundle = [[NSBundle alloc] initWithPath:@"/Library/PreferenceLoader/Preferences/NCDateCustomizer"];
+    alertTitle = [NSLocalizedStringFromTableInBundle(@"NC Date Customizer", @"NCDateCustomizer", localizedBundle, @"NC Date Customizer") retain];
+    alertMessage = [NSLocalizedStringFromTableInBundle(@"You must respring to change the visibility.", @"NCDateCustomizer", localizedBundle, @"You must respring to change the visibility.") retain];
+    alertCancel = [NSLocalizedStringFromTableInBundle(@"Later", @"NCDateCustomizer", localizedBundle, @"Later") retain];
+    alertRespring = [NSLocalizedStringFromTableInBundle(@"Respring", @"NCDateCustomizer", localizedBundle, @"Respring") retain];
+    [localizedBundle release];
+
+    LoadPreferences(YES);
+
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PreferencesChangedCallback, CFSTR(PreferencesChangedNotification), NULL, CFNotificationSuspensionBehaviorCoalesce);
 
-    return view;
+    if (enabled && !visible) {
+        [view release];
+        dateLabel = nil;
+        headerView = nil;
+        return nil;
+    } else
+        return view;
+}
+
+- (void)updateContent {
+    if (!enabled || visible)
+        %orig;
+    else
+        [dateLabel setText:@""];
 }
 
 - (CGRect)dateLabelFrame {
     CGRect frame = %orig;
+    if (enabled) {
+        frame.origin.x = leftMargin;
+        frame.size.width = self.frame.size.width - leftMargin;
+    }
+    return frame;
+}
+
+- (CGRect)dateLabelFrameForBounds:(CGRect)bounds force:(BOOL)force {
+    CGRect frame = %orig(bounds, force);
     if (enabled) {
         frame.origin.x = leftMargin;
         frame.size.width = self.frame.size.width - leftMargin;
