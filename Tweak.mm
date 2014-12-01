@@ -1,23 +1,33 @@
 #import <UIKit/UIKit.h>
 #import <CaptainHook/CaptainHook.h>
 
+#define PreferencesName "com.autopear.ncdatecustomizer"
 #define PreferencesChangedNotification "com.autopear.ncdatecustomizer.changed"
 #define PreferencesFilePath @"/var/mobile/Library/Preferences/com.autopear.ncdatecustomizer.plist"
 
 @interface SBTodayTableHeaderView : UIView {
     UILabel *_dateLabel;
+    UILabel* _lunarDateLabel; // iOS 8
 }
-+ (UIFont *)defaultFont;
-+ (UIColor *)defaultTextColor;
++ (UIFont *)defaultLunarDateFont; //iOS 8
++ (UIFont *)defaultDateFont; //iOS 8
++ (UIFont *)defaultFont; //iOS 7
++ (UIColor *)defaultTextColor; //iOS 7
 + (id)defaultBackgroundColor;
+- (void)_layoutLunarDateLabel; //iOS 8
+- (CGRect)_lunarDateLabelFrameForBounds:(CGRect)bounds; //iOS 8
+- (void)_layoutDateLabel; //iOS 8
+- (id)lunarDateHeaderString; //iOS 8
+- (BOOL)showsLunarDate; //iOS 8
+- (id)lunarCalendarIdentifier; //iOS 8
 - (void)layoutSubviews;
 - (CGSize)sizeThatFits:(CGSize)size;
 - (CGRect)dateLabelFrame; //iOS 7.0
-- (CGRect)dateLabelFrameForBounds:(CGRect)bounds force:(BOOL)force; //iOS 7.1
+- (CGRect)dateLabelFrameForBounds:(CGRect)bounds force:(BOOL)force; //iOS 7.1 & 8
 - (void)updateContent; //iOS 7.0
 - (id)dateHeaderAttributedString; //iOS 7.0
 - (id)dateHeader; //iOS 7.0
-- (id)dateHeaderAttributedStringOnSingleLine:(BOOL)line; //iOS 7.1
+- (id)dateHeaderAttributedStringOnSingleLine:(BOOL)line; //iOS 7.1 & 8
 - (id)dateHeaderOnSingleLine:(BOOL)line; //iOS 7.1
 - (void)dealloc;
 - (SBTodayTableHeaderView *)initWithFrame:(CGRect)frame;
@@ -29,8 +39,8 @@
 - (id)firstSection; //iOS 7.0
 - (void)widget:(id)widget didUpdatePreferredSize:(CGSize)size;
 - (void)updateTableHeader; //iOS 7.0
-- (void)forceUpdateTableHeader; //iOS 7.1
-- (void)updateTableHeaderIfNecessary; //iOS 7.1
+- (void)forceUpdateTableHeader; //iOS 7.1 & 8
+- (void)updateTableHeaderIfNecessary; //iOS 7.1 & 8
 - (void)_updateTableHeader:(BOOL)header;
 - (id)todayTableHeaderView;
 - (id)infoForWidgetSection:(id)widgetSection;
@@ -42,8 +52,7 @@
 }
 @end
 
-@interface SBNotificationCenterController : NSObject {
-}
+@interface SBNotificationCenterController : NSObject
 @property(readonly, nonatomic) SBNotificationCenterViewController *viewController;
 + (SBNotificationCenterController *)sharedInstance;
 @end
@@ -67,7 +76,10 @@
 static BOOL enabled = YES;
 static BOOL visible = YES;
 static BOOL singleLine = YES;
+static BOOL lunarEnabled = YES; // iOS 8
+static int textAlignment = 0;
 static CGFloat leftMargin = 47.0f;
+static CGFloat rightMargin = 0.0f;
 static CGFloat red = 1.0f;
 static CGFloat green = 1.0f;
 static CGFloat blue = 1.0f;
@@ -75,66 +87,127 @@ static CGFloat alpha = 1.0f;
 
 static SBTodayTableHeaderView *headerView = nil;
 static UILabel *dateLabel = nil;
+static UILabel *lunarLabel = nil;
 static SBTodayViewController *todayController = nil;
 static NCAlertDelegate *alertDelegate = nil;
 static NSString *alertTitle = nil, *alertMessage = nil, *alertCancel = nil, *alertRespring = nil;
 
+static BOOL readPreferenceBOOL(NSString *key, BOOL defaultValue) {
+    return !CFPreferencesCopyAppValue((__bridge CFStringRef)key, CFSTR(PreferencesName)) ? defaultValue : [(id)CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, CFSTR(PreferencesName))) boolValue];
+}
+
+static CGFloat readPreferenceFloat(NSString *key, CGFloat defaultValue) {
+    return !CFPreferencesCopyAppValue((__bridge CFStringRef)key, CFSTR(PreferencesName)) ? defaultValue : [(id)CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, CFSTR(PreferencesName))) floatValue];
+}
+
+static CGFloat readPreferenceInt(NSString *key, int defaultValue) {
+    return !CFPreferencesCopyAppValue((__bridge CFStringRef)key, CFSTR(PreferencesName)) ? defaultValue : [(id)CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, CFSTR(PreferencesName))) floatValue];
+}
+
 static void LoadPreferences(BOOL init) {
-	NSDictionary *preferences = [NSDictionary dictionaryWithContentsOfFile:PreferencesFilePath];
-
-    if ([preferences objectForKey:@"enabled"])
-        enabled = [[preferences objectForKey:@"enabled"] boolValue];
-    else
-        enabled = YES;
-
     BOOL visibilityChanged = NO;
-    if (init) {
-        if ([preferences objectForKey:@"visible"])
-            visible = [[preferences objectForKey:@"visible"] boolValue];
-        else
-            visible = YES;
-    } else {
-        BOOL tmp = [preferences objectForKey:@"visible"] ? [[preferences objectForKey:@"visible"] boolValue] : YES;
-        if (tmp != visible) {
-            visible = tmp;
-            visibilityChanged = YES;
+
+    if (kCFCoreFoundationVersionNumber >= 1140.10) {
+        CFPreferencesAppSynchronize(CFSTR(PreferencesName));
+
+        enabled =  readPreferenceBOOL(@"enabled", YES);
+
+        if (init)
+            visible = readPreferenceBOOL(@"visible", YES);
+        else {
+            BOOL tmp = readPreferenceBOOL(@"visible", YES);
+            if (tmp != visible) {
+                visible = tmp;
+                visibilityChanged = YES;
+            }
         }
+
+        singleLine = readPreferenceBOOL(@"singleLine", YES);
+
+        lunarEnabled = readPreferenceBOOL(@"lunarEnabled", YES);
+
+        textAlignment = readPreferenceInt(@"textAlignment", 0);
+
+        leftMargin = readPreferenceFloat(@"leftMargin", 47.0f);
+
+        rightMargin = readPreferenceFloat(@"rightMargin", 0.0f);
+
+        red = readPreferenceFloat(@"red", 1.0f);
+
+        green = readPreferenceFloat(@"green", 1.0f);
+
+        blue = readPreferenceFloat(@"blue", 10.f);
+
+        alpha = readPreferenceFloat(@"alpha", 10.f);
+    } else {
+        NSDictionary *preferences = [NSDictionary dictionaryWithContentsOfFile:PreferencesFilePath];
+
+        if ([preferences objectForKey:@"enabled"])
+            enabled = [[preferences objectForKey:@"enabled"] boolValue];
+        else
+            enabled = YES;
+
+        if (init) {
+            if ([preferences objectForKey:@"visible"])
+                visible = [[preferences objectForKey:@"visible"] boolValue];
+            else
+                visible = YES;
+        } else {
+            BOOL tmp = [preferences objectForKey:@"visible"] ? [[preferences objectForKey:@"visible"] boolValue] : YES;
+            if (tmp != visible) {
+                visible = tmp;
+                visibilityChanged = YES;
+            }
+        }
+
+        if ([preferences objectForKey:@"singleLine"])
+            singleLine = [[preferences objectForKey:@"singleLine"] boolValue];
+        else
+            singleLine = YES;
+
+        if ([preferences objectForKey:@"textAlignment"])
+            textAlignment = [[preferences objectForKey:@"textAlignment"] intValue];
+        else
+            textAlignment = 0;
+
+        if ([preferences objectForKey:@"leftMargin"])
+            leftMargin = [[preferences objectForKey:@"leftMargin"] floatValue];
+        else
+            leftMargin = 47.0f;
+
+        if ([preferences objectForKey:@"rightMargin"])
+            rightMargin = [[preferences objectForKey:@"rightMargin"] floatValue];
+        else
+            rightMargin = 0.0f;
+
+        if ([preferences objectForKey:@"red"])
+            red = [[preferences objectForKey:@"red"] floatValue];
+        else
+            red = 1.0f;
+
+        if ([preferences objectForKey:@"green"])
+            green = [[preferences objectForKey:@"green"] floatValue];
+        else
+            green = 1.0f;
+
+        if ([preferences objectForKey:@"blue"])
+            blue = [[preferences objectForKey:@"blue"] floatValue];
+        else
+            blue = 1.0f;
+
+        if ([preferences objectForKey:@"alpha"])
+            alpha = [[preferences objectForKey:@"alpha"] floatValue];
+        else
+            alpha = 1.0f;
     }
-
-    if ([preferences objectForKey:@"singleLine"])
-        singleLine = [[preferences objectForKey:@"singleLine"] boolValue];
-    else
-        singleLine = YES;
-
-    if ([preferences objectForKey:@"leftMargin"])
-        leftMargin = [[preferences objectForKey:@"leftMargin"] floatValue];
-    else
-        leftMargin = 47.0f;
-
-    if ([preferences objectForKey:@"red"])
-        red = [[preferences objectForKey:@"red"] floatValue];
-    else
-        red = 1.0f;
-
-    if ([preferences objectForKey:@"green"])
-        green = [[preferences objectForKey:@"green"] floatValue];
-    else
-        red = 1.0f;
-
-    if ([preferences objectForKey:@"blue"])
-        blue = [[preferences objectForKey:@"blue"] floatValue];
-    else
-        red = 1.0f;
-
-    if ([preferences objectForKey:@"alpha"])
-        alpha = [[preferences objectForKey:@"alpha"] floatValue];
-    else
-        red = 1.0f;
 
     if (headerView && dateLabel) {
         if (enabled) {
             dateLabel.adjustsFontSizeToFitWidth = NO;
-            dateLabel.font = [%c(SBTodayTableHeaderView) defaultFont];
+            if ([%c(SBTodayTableHeaderView) respondsToSelector:@selector(defaultFont)])
+                dateLabel.font = [%c(SBTodayTableHeaderView) defaultFont];
+            else
+                dateLabel.font = [%c(SBTodayTableHeaderView) defaultDateFont];
 
             if ([headerView respondsToSelector:@selector(updateContent)])
                 [headerView updateContent];
@@ -146,14 +219,33 @@ static void LoadPreferences(BOOL init) {
                 dateLabel.numberOfLines = 2;
             }
 
+            NSTextAlignment align;
+            if (textAlignment == 1)
+                align = NSTextAlignmentCenter;
+            else if (textAlignment == 2)
+                align = NSTextAlignmentRight;
+            else
+                align = NSTextAlignmentLeft;
+
             CGRect frame = dateLabel.frame;
             frame.origin.x = leftMargin;
-            frame.size.width = headerView.frame.size.width - leftMargin;
+            frame.size.width = headerView.frame.size.width - leftMargin - rightMargin;
             dateLabel.frame = frame;
+            dateLabel.textAlignment = align;
 
+            if (lunarLabel) {
+                CGRect lunarFrame = lunarLabel.frame;
+                lunarFrame.origin.x = leftMargin;
+                lunarFrame.size.width = headerView.frame.size.width - leftMargin - rightMargin;
+                lunarLabel.frame = lunarFrame;
+                lunarLabel.textAlignment = align;
+            }
         } else {
             dateLabel.adjustsFontSizeToFitWidth = NO;
-            dateLabel.font = [%c(SBTodayTableHeaderView) defaultFont];
+            if ([%c(SBTodayTableHeaderView) respondsToSelector:@selector(defaultFont)])
+                dateLabel.font = [%c(SBTodayTableHeaderView) defaultFont];
+            else
+                dateLabel.font = [%c(SBTodayTableHeaderView) defaultDateFont];
             dateLabel.numberOfLines = 2;
 
             if ([headerView respondsToSelector:@selector(updateContent)])
@@ -163,9 +255,18 @@ static void LoadPreferences(BOOL init) {
             frame.origin.x = 47.0f;
             frame.size.width = headerView.frame.size.width - 47.0f;
             dateLabel.frame = frame;
+
+            if (lunarLabel) {
+                CGRect lunarFrame = lunarLabel.frame;
+                lunarFrame.origin.x = 47.0f;
+                lunarFrame.size.width = headerView.frame.size.width - 47.0f;
+                lunarLabel.frame = lunarFrame;
+            }
         }
 
         dateLabel.textColor = [%c(SBTodayTableHeaderView) defaultTextColor];
+        if (lunarLabel)
+            lunarLabel.textColor = [%c(SBTodayTableHeaderView) defaultTextColor];
 
         [headerView layoutSubviews];
 
@@ -214,6 +315,11 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
     dateLabel = _dateLabel;
     dateLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
 
+    if (kCFCoreFoundationVersionNumber >= 1140.10) {
+        UILabel* _lunarDateLabel = CHIvar(view, _lunarDateLabel, UILabel *);
+        lunarLabel = _lunarDateLabel;
+    }
+
     alertDelegate = [[[NCAlertDelegate alloc] init] retain];
 
     NSBundle *localizedBundle = [[NSBundle alloc] initWithPath:@"/Library/PreferenceLoader/Preferences/NCDateCustomizer"];
@@ -247,7 +353,7 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
     CGRect frame = %orig;
     if (enabled) {
         frame.origin.x = leftMargin;
-        frame.size.width = self.frame.size.width - leftMargin;
+        frame.size.width = self.frame.size.width - leftMargin - rightMargin;
     }
     return frame;
 }
@@ -256,9 +362,43 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
     CGRect frame = %orig(bounds, force);
     if (enabled) {
         frame.origin.x = leftMargin;
-        frame.size.width = self.frame.size.width - leftMargin;
+        frame.size.width = self.frame.size.width - leftMargin - rightMargin;
     }
     return frame;
+}
+
+- (CGRect)_lunarDateLabelFrameForBounds:(CGRect)bounds {
+    CGRect frame = %orig(bounds);
+    if (enabled) {
+        frame.origin.x = leftMargin;
+        frame.size.width = self.frame.size.width - leftMargin - rightMargin;
+    }
+    return frame;
+}
+
+- (BOOL)showsLunarDate {
+    BOOL ret = %orig;
+    if (enabled)
+        return lunarEnabled ? ret : NO;
+    else
+        return ret;
+}
+
+- (void)layoutSubviews {
+    %orig;
+    if (enabled) {
+        NSTextAlignment align;
+        if (textAlignment == 1)
+            align = NSTextAlignmentCenter;
+        else if (textAlignment == 2)
+            align = NSTextAlignmentRight;
+        else
+            align = NSTextAlignmentLeft;
+        if (dateLabel)
+            dateLabel.textAlignment = align;
+        if (lunarLabel)
+            lunarLabel.textAlignment = align;
+    }
 }
 
 + (id)defaultTextColor {

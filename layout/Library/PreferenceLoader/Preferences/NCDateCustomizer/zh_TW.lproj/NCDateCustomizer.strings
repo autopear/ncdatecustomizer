@@ -1,11 +1,19 @@
+
+"Center" = "居中";
+"Default margin: 0." = "預設右邊距：0。";
 "Default margin: 47." = "預設左邊距：47。";
 "Enabled" = "啟用";
 "Later" = "稍後";
 "Left Margin" = "左邊距";
+"Left" = "靠左";
+"Lunar Date" = "農曆";
 "NC Date Customizer" = "通知中心日期自訂";
 "Red / Green / Blue / Alpha" = "紅 / 綠 / 藍 / 透明度";
 "Respring" = "重新加載";
+"Right Margin" = "右邊距";
+"Right" = "靠右";
 "Single Line" = "單行顯示";
+"Text Alignment" = "文字對齊";
 "Text Color" = "文字顏色";
 "Visible" = "可見";
 "You must respring to change the visibility." = "您需要重新加載『主畫面』以顯示或隱藏。";
