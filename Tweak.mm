@@ -11,6 +11,7 @@
 }
 + (UIFont *)defaultLunarDateFont; //iOS 8
 + (UIFont *)defaultDateFont; //iOS 8
++ (UIFont *)defaultDateFontForMode:(long long)mode; //iOS 9
 + (UIFont *)defaultFont; //iOS 7
 + (UIColor *)defaultTextColor; //iOS 7
 + (id)defaultBackgroundColor;
@@ -47,8 +48,14 @@
 - (void)viewWillLayoutSubviews;
 @end
 
+@interface SBNotificationCenterLayoutViewController : UIViewController {
+    SBTodayViewController *_todayViewController; //iOS 9
+}
+@end
+
 @interface SBNotificationCenterViewController : UIViewController {
     SBTodayViewController *_todayViewController;
+    SBNotificationCenterLayoutViewController *_layoutViewController; //iOS 9
 }
 @end
 
@@ -56,7 +63,6 @@
 @property(readonly, nonatomic) SBNotificationCenterViewController *viewController;
 + (SBNotificationCenterController *)sharedInstance;
 @end
-
 
 @interface SpringBoard : UIApplication
 -(void)relaunchSpringBoard;
@@ -206,8 +212,10 @@ static void LoadPreferences(BOOL init) {
             dateLabel.adjustsFontSizeToFitWidth = NO;
             if ([%c(SBTodayTableHeaderView) respondsToSelector:@selector(defaultFont)])
                 dateLabel.font = [%c(SBTodayTableHeaderView) defaultFont];
-            else
+            else if ([%c(SBTodayTableHeaderView) respondsToSelector:@selector(defaultDateFont)])
                 dateLabel.font = [%c(SBTodayTableHeaderView) defaultDateFont];
+            else
+                dateLabel.font = [%c(SBTodayTableHeaderView) defaultDateFontForMode:0];
 
             if ([headerView respondsToSelector:@selector(updateContent)])
                 [headerView updateContent];
@@ -244,8 +252,10 @@ static void LoadPreferences(BOOL init) {
             dateLabel.adjustsFontSizeToFitWidth = NO;
             if ([%c(SBTodayTableHeaderView) respondsToSelector:@selector(defaultFont)])
                 dateLabel.font = [%c(SBTodayTableHeaderView) defaultFont];
-            else
+            else if ([%c(SBTodayTableHeaderView) respondsToSelector:@selector(defaultDateFont)])
                 dateLabel.font = [%c(SBTodayTableHeaderView) defaultDateFont];
+            else
+                dateLabel.font = [%c(SBTodayTableHeaderView) defaultDateFontForMode:0];
             dateLabel.numberOfLines = 2;
 
             if ([headerView respondsToSelector:@selector(updateContent)])
@@ -272,7 +282,12 @@ static void LoadPreferences(BOOL init) {
 
         if (!todayController) {
             SBNotificationCenterViewController *viewController = [%c(SBNotificationCenterController) sharedInstance].viewController;
-            todayController = CHIvar(viewController, _todayViewController, SBTodayViewController *);
+            if (kCFCoreFoundationVersionNumber < 1240.10) //iOS 7 & 8
+                todayController = CHIvar(viewController, _todayViewController, SBTodayViewController *);
+            else { //iOS 9
+                SBNotificationCenterLayoutViewController *nclvc = CHIvar(viewController, _layoutViewController, SBNotificationCenterLayoutViewController *);
+                todayController = CHIvar(nclvc, _todayViewController, SBTodayViewController *);
+            }
         }
         if ([todayController respondsToSelector:@selector(updateContent)])
             [todayController updateTableHeader];
